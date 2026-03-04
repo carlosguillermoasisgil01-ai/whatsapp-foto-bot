@@ -87,36 +87,30 @@ function ensureUser(user) {
 function parseAnswer(text) {
   const t = (text || "").trim().toLowerCase();
 
+  // detectar respuestas positivas
   if (
-    [
-      "si",
-      "sí",
-      "s",
-      "hecho",
-      "ya",
-      "ok",
-      "he subido la foto",
-      "foto subida",
-      "subida",
-      "ya la he subido"
-    ].includes(t)
-  )
+    t.includes("si") ||
+    t.includes("sí") ||
+    t.includes("subid") ||
+    t.includes("hecho") ||
+    t.includes("listo") ||
+    t.includes("ok")
+  ) {
     return "yes";
+  }
 
+  // detectar respuestas negativas
   if (
-    [
-      "no",
-      "n",
-      "aun no",
-      "aún no",
-      "todavia no",
-      "todavía no"
-    ].includes(t)
-  )
+    t.includes("no") ||
+    t.includes("aun no") ||
+    t.includes("aún no") ||
+    t.includes("todavia no") ||
+    t.includes("todavía no")
+  ) {
     return "no";
+  }
 
   return "unknown";
-}
 }
 
 // Twilio -> tu servidor (cuando tú escribes)
