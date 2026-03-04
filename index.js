@@ -9,7 +9,7 @@ const TZ = "Europe/Madrid";
 const FOUR_HOURS = 4 * 60 * 60 * 1000;
 const THIRTY_MIN = 30 * 60 * 1000;
 
-// Estado en memoria (MVP)
+// Estado en memoria
 const users = {};
 // users[user] = { day: "YYYY-MM-DD", done: bool, awaiting: bool, nextAsk: number }
 
@@ -32,14 +32,16 @@ function madridHM(date = new Date()) {
 
   const hh = Number(parts.find((p) => p.type === "hour").value);
   const mm = Number(parts.find((p) => p.type === "minute").value);
+
   return { hh, mm };
 }
 
 function inWindow(date = new Date()) {
   const { hh } = madridHM(date);
-  // 08:00 a 23:59
+
   if (hh < 8) return false;
   if (hh > 23) return false;
+
   return true;
 }
 
@@ -49,59 +51,82 @@ function msUntilNext08(now = new Date()) {
 
   for (let i = 0; i < 60 * 48; i++) {
     const { hh, mm } = madridHM(t);
-    if (hh === 8 && mm === 0 && t.getTime() > start) return t.getTime() - start;
+
+    if (hh === 8 && mm === 0 && t.getTime() > start) {
+      return t.getTime() - start;
+    }
+
     t = new Date(t.getTime() + 60 * 1000);
   }
+
   return 24 * 60 * 60 * 1000;
 }
 
 function msUntilTomorrow08(now = new Date()) {
   const startDay = madridDay(now);
   const start = now.getTime();
+
   let t = new Date(start);
 
   for (let i = 0; i < 60 * 48; i++) {
     const { hh, mm } = madridHM(t);
     const d = madridDay(t);
-    if (d !== startDay && hh === 8 && mm === 0) return t.getTime() - start;
+
+    if (d !== startDay && hh === 8 && mm === 0) {
+      return t.getTime() - start;
+    }
+
     t = new Date(t.getTime() + 60 * 1000);
   }
+
   return 24 * 60 * 60 * 1000;
 }
 
 function clampToWindow(ts) {
   const d = new Date(ts);
+
   if (inWindow(d)) return ts;
+
   return Date.now() + msUntilNext08(new Date());
 }
 
 function ensureUser(user) {
   const today = madridDay();
+
   if (!users[user] || users[user].day !== today) {
     const now = new Date();
-    const nextAsk = inWindow(now) ? Date.now() : Date.now() + msUntilNext08(now);
-    users[user] = { day: today, done: false, awaiting: false, nextAsk };
+
+    const nextAsk = inWindow(now)
+      ? Date.now()
+      : Date.now() + msUntilNext08(now);
+
+    users[user] = {
+      day: today,
+      done: false,
+      awaiting: false,
+      nextAsk,
+    };
   }
 }
 
 function parseAnswer(text) {
   const t = (text || "").trim().toLowerCase();
 
-  // detectar respuestas positivas
+  // respuestas positivas
   if (
-    t.includes("si") ||
-    t.includes("sí") ||
+    t === "si" ||
+    t === "sí" ||
     t.includes("subid") ||
     t.includes("hecho") ||
     t.includes("listo") ||
-    t.includes("ok")
+    t === "ok"
   ) {
     return "yes";
   }
 
-  // detectar respuestas negativas
+  // respuestas negativas
   if (
-    t.includes("no") ||
+    t === "no" ||
     t.includes("aun no") ||
     t.includes("aún no") ||
     t.includes("todavia no") ||
@@ -113,12 +138,11 @@ function parseAnswer(text) {
   return "unknown";
 }
 
-// Twilio -> tu servidor (cuando tú escribes)
+// Webhook de Twilio
 app.post("/whatsapp/incoming", (req, res) => {
-  const from = req.body.From; // whatsapp:+34...
+  const from = req.body.From;
   const body = req.body.Body;
 
-  // te registras para recordatorios
   ensureUser(from);
 
   const ans = parseAnswer(body);
@@ -127,55 +151,85 @@ app.post("/whatsapp/incoming", (req, res) => {
   if (ans === "yes") {
     users[from].done = true;
     users[from].awaiting = false;
-    users[from].nextAsk = Date.now() + msUntilTomorrow08(new Date()); // mañana 08:00
-    twiml.message("Perfecto. Mañana a las 08:00 te vuelvo a preguntar.");
-  } else if (ans === "no") {
+    users[from].nextAsk =
+      Date.now() + msUntilTomorrow08(new Date());
+
+    twiml.message(
+      "Perfecto. Mañana a las 08:00 te vuelvo a preguntar."
+    );
+  }
+
+  else if (ans === "no") {
     users[from].done = false;
     users[from].awaiting = false;
-    users[from].nextAsk = clampToWindow(Date.now() + FOUR_HOURS);
-    twiml.message("Vale. Te lo vuelvo a preguntar en 4 horas.");
-  } else {
+
+    users[from].nextAsk =
+      clampToWindow(Date.now() + FOUR_HOURS);
+
+    twiml.message(
+      "Vale. Te lo vuelvo a preguntar en 4 horas."
+    );
+  }
+
+  else {
     twiml.message("Respóndeme 'sí' o 'no'.");
   }
 
   res.type("text/xml").send(twiml.toString());
 });
 
-// Cron -> /tick (llamar cada pocos minutos)
+// función ejecutada por cron
 async function runTick(req, res) {
-  const secret = req.query.secret || req.headers["x-cron-secret"];
-  if (secret !== process.env.CRON_SECRET) return res.status(401).send("unauthorized");
+  const secret =
+    req.query.secret || req.headers["x-cron-secret"];
 
-  if (!inWindow(new Date())) {
-    return res.json({ ok: true, window: "closed" });
+  if (secret !== process.env.CRON_SECRET) {
+    return res.status(401).send("unauthorized");
   }
 
-  const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+  if (!inWindow(new Date())) {
+    return res.json({
+      ok: true,
+      window: "closed",
+    });
+  }
+
+  const client = twilio(
+    process.env.TWILIO_ACCOUNT_SID,
+    process.env.TWILIO_AUTH_TOKEN
+  );
+
   const now = Date.now();
 
   for (const user of Object.keys(users)) {
+
     ensureUser(user);
 
     if (users[user].done) continue;
+
     if (now < users[user].nextAsk) continue;
 
     await client.messages.create({
-      from: process.env.TWILIO_WHATSAPP_FROM, // sandbox: whatsapp:+14155238886
+      from: process.env.TWILIO_WHATSAPP_FROM,
       to: user,
       body: "¿Has subido la foto?",
     });
 
-    // insiste cada 30 min si no respondes
     users[user].awaiting = true;
     users[user].nextAsk = now + THIRTY_MIN;
   }
 
-  res.json({ ok: true, users: Object.keys(users).length });
+  res.json({
+    ok: true,
+    users: Object.keys(users).length,
+  });
 }
 
 app.get("/tick", runTick);
 app.post("/tick", runTick);
 
-app.get("/", (req, res) => res.send("Bot activo"));
+app.get("/", (req, res) => {
+  res.send("Bot activo");
+});
 
 app.listen(process.env.PORT || 3000);
