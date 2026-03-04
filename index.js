@@ -86,9 +86,37 @@ function ensureUser(user) {
 
 function parseAnswer(text) {
   const t = (text || "").trim().toLowerCase();
-  if (["si", "sí", "s", "hecho", "ya", "ok"].includes(t)) return "yes";
-  if (["no", "n", "aun no", "aún no"].includes(t)) return "no";
+
+  if (
+    [
+      "si",
+      "sí",
+      "s",
+      "hecho",
+      "ya",
+      "ok",
+      "he subido la foto",
+      "foto subida",
+      "subida",
+      "ya la he subido"
+    ].includes(t)
+  )
+    return "yes";
+
+  if (
+    [
+      "no",
+      "n",
+      "aun no",
+      "aún no",
+      "todavia no",
+      "todavía no"
+    ].includes(t)
+  )
+    return "no";
+
   return "unknown";
+}
 }
 
 // Twilio -> tu servidor (cuando tú escribes)
