@@ -55,3 +55,21 @@ app.get("/", (req,res)=>{
 });
 
 app.listen(process.env.PORT || 3000);
+app.get("/ask", async (req, res) => {
+
+  const client = require("twilio")(
+    process.env.TWILIO_ACCOUNT_SID,
+    process.env.TWILIO_AUTH_TOKEN
+  );
+
+  const to = "whatsapp:+34625924562";
+
+  await client.messages.create({
+    from: "whatsapp:+14155238886",
+    to: to,
+    body: "¿Has subido la foto?"
+  });
+
+  res.send("Pregunta enviada");
+
+});
