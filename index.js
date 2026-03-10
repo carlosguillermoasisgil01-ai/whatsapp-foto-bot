@@ -7,7 +7,7 @@ const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const CRON_SECRET = process.env.CRON_SECRET || "123456";
 
-const FOUR_HOURS = 4 * 60 * 60 * 1000;
+const THREE_HOURS = 3 * 60 * 60 * 1000;
 const THIRTY_MIN = 30 * 60 * 1000;
 const TZ = "Europe/Madrid";
 
@@ -42,10 +42,10 @@ function nowMadridParts() {
 
 function isInWindow() {
   const { hour } = nowMadridParts();
-  return hour >= 8 && hour <= 23;
+  return hour >= 10 && hour <= 23;
 }
 
-function nextTomorrowAt8Madrid() {
+function nextTomorrowAt10Madrid() {
   const now = new Date();
   let probe = new Date(now.getTime());
 
@@ -66,7 +66,7 @@ function nextTomorrowAt8Madrid() {
     const hour = Number(get("hour"));
     const minute = Number(get("minute"));
 
-    if (hour === 8 && minute === 0) {
+    if (hour === 10 && minute === 0) {
       return probe.getTime();
     }
   }
@@ -87,11 +87,11 @@ function clampToWindow(timestamp) {
   const get = (type) => parts.find((p) => p.type === type)?.value;
   const hour = Number(get("hour"));
 
-  if (hour >= 8 && hour <= 23) {
+  if (hour >= 10 && hour <= 23) {
     return timestamp;
   }
 
-  return nextTomorrowAt8Madrid();
+  return nextTomorrowAt10Madrid();
 }
 
 async function sendTelegram(text) {
@@ -112,12 +112,12 @@ app.post("/telegram", async (req, res) => {
 
   if (msg === "sí" || msg === "si") {
     state.done = true;
-    state.nextAsk = nextTomorrowAt8Madrid();
-    await sendTelegram("Perfecto. Mañana a las 08:00 te vuelvo a preguntar.");
+    state.nextAsk = nextTomorrowAt10Madrid();
+    await sendTelegram("Perfecto. Mañana a las 10:00 te vuelvo a preguntar.");
   } else if (msg === "no") {
     state.done = false;
-    state.nextAsk = clampToWindow(Date.now() + FOUR_HOURS);
-    await sendTelegram("Vale. Te lo vuelvo a preguntar en 4 horas.");
+    state.nextAsk = clampToWindow(Date.now() + THREE_HOURS);
+    await sendTelegram("Vale. Te lo vuelvo a preguntar en 3 horas.");
   }
 
   res.sendStatus(200);
