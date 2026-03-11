@@ -136,6 +136,11 @@ app.get("/tick", async (req, res) => {
     return res.json({ ok: true, sent: 0, window: "closed" });
   }
 
+  // Si ya ha llegado la hora programada, reactivamos el bot
+  if (state.done && now >= state.nextAsk) {
+    state.done = false;
+  }
+
   if (!state.done && now >= state.nextAsk) {
     await sendTelegram("¿Has subido la foto?");
     state.nextAsk = now + THIRTY_MIN;
