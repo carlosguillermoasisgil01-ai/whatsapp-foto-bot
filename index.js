@@ -13,7 +13,9 @@ const TZ = "Europe/Madrid";
 
 let state = {
   done: false,
-  nextAsk: Date.now()
+  nextAsk: Date.now(),
+  lastPromptDate: null, // último día en que el bot preguntó
+  lastAlertDate: null   // último día en que mandó alerta de fallo
 };
 
 function nowMadridParts() {
@@ -38,6 +40,11 @@ function nowMadridParts() {
     minute: Number(get("minute")),
     second: Number(get("second"))
   };
+}
+
+function todayMadridString() {
+  const { year, month, day } = nowMadridParts();
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 function isInWindow() {
@@ -144,10 +151,30 @@ app.get("/tick", async (req, res) => {
   if (!state.done && now >= state.nextAsk) {
     await sendTelegram("¿Has subido la foto?");
     state.nextAsk = now + THIRTY_MIN;
+    state.lastPromptDate = todayMadridString();
     return res.json({ ok: true, sent: 1 });
   }
 
   res.json({ ok: true, sent: 0 });
+});
+
+// comprobación diaria a las 22:00
+app.get("/check-daily", async (req, res) => {
+  const secret = req.query.secret;
+
+  if (secret !== CRON_SECRET) {
+    return res.status(401).json({ ok: false, error: "unauthorized" });
+  }
+
+  const today = todayMadridString();
+
+  if (state.lastPromptDate !== today && state.lastAlertDate !== today) {
+    await sendTelegram("BOT_FOTO: hoy no he enviado ningún recordatorio. Revisa si algo ha fallado.");
+    state.lastAlertDate = today;
+    return res.json({ ok: true, alertSent: 1 });
+  }
+
+  return res.json({ ok: true, alertSent: 0 });
 });
 
 app.get("/", (req, res) => res.send("Telegram bot activo"));
