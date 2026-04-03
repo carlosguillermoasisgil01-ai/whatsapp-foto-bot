@@ -14,8 +14,8 @@ const TZ = "Europe/Madrid";
 let state = {
   done: false,
   nextAsk: Date.now(),
-  lastPromptDate: null, // último día en que el bot preguntó
-  lastAlertDate: null   // último día en que mandó alerta de fallo
+  lastPromptDate: null,
+  lastAlertDate: null
 };
 
 function nowMadridParts() {
@@ -49,7 +49,7 @@ function todayMadridString() {
 
 function isInWindow() {
   const { hour, minute } = nowMadridParts();
-  return hour > 8 || (hour === 8 && minute >= 30);
+  return (hour > 8 || (hour === 8 && minute >= 30)) && hour <= 23;
 }
 
 function nextTomorrowAt0830Madrid() {
@@ -95,7 +95,7 @@ function clampToWindow(timestamp) {
   const hour = Number(get("hour"));
   const minute = Number(get("minute"));
 
-  if (hour > 8 || (hour === 8 && minute >= 30)) {
+  if ((hour > 8 || (hour === 8 && minute >= 30)) && hour <= 23) {
     return timestamp;
   }
 
@@ -139,42 +139,34 @@ app.get("/tick", async (req, res) => {
   }
 
   const now = Date.now();
+  const today = todayMadridString();
+  const { hour } = nowMadridParts();
 
   if (!isInWindow()) {
     return res.json({ ok: true, sent: 0, window: "closed" });
   }
 
+  // Reactiva el bot cuando llega la hora del día siguiente
   if (state.done && now >= state.nextAsk) {
     state.done = false;
   }
 
+  // Primero, comportamiento normal del bot
   if (!state.done && now >= state.nextAsk) {
     await sendTelegram("¿Has subido la foto?");
     state.nextAsk = now + THIRTY_MIN;
-    state.lastPromptDate = todayMadridString();
-    return res.json({ ok: true, sent: 1 });
+    state.lastPromptDate = today;
+    return res.json({ ok: true, sent: 1, type: "prompt" });
+  }
+
+  // A partir de las 22:00, si hoy no ha mandado nada, avisa
+  if (hour >= 22 && state.lastPromptDate !== today && state.lastAlertDate !== today) {
+    await sendTelegram("BOT_FOTO: hoy no he enviado ningún recordatorio. Revisa si algo ha fallado.");
+    state.lastAlertDate = today;
+    return res.json({ ok: true, sent: 1, type: "alert" });
   }
 
   res.json({ ok: true, sent: 0 });
-});
-
-// comprobación diaria a las 22:00
-app.get("/check-daily", async (req, res) => {
-  const secret = req.query.secret;
-
-  if (secret !== CRON_SECRET) {
-    return res.status(401).json({ ok: false, error: "unauthorized" });
-  }
-
-  const today = todayMadridString();
-
-  if (state.lastPromptDate !== today && state.lastAlertDate !== today) {
-    await sendTelegram("BOT_FOTO: hoy no he enviado ningún recordatorio. Revisa si algo ha fallado.");
-    state.lastAlertDate = today;
-    return res.json({ ok: true, alertSent: 1 });
-  }
-
-  return res.json({ ok: true, alertSent: 0 });
 });
 
 app.get("/", (req, res) => res.send("Telegram bot activo"));
