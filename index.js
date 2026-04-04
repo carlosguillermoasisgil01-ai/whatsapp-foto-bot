@@ -8,14 +8,12 @@ const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const CRON_SECRET = process.env.CRON_SECRET || "123456";
 
 const THREE_HOURS = 3 * 60 * 60 * 1000;
-const THIRTY_MIN = 30 * 60 * 1000;
+const ONE_HOUR = 60 * 60 * 1000;
 const TZ = "Europe/Madrid";
 
 let state = {
   done: false,
-  nextAsk: Date.now(),
-  lastPromptDate: null,
-  lastAlertDate: null
+  nextAsk: Date.now()
 };
 
 function nowMadridParts() {
@@ -40,11 +38,6 @@ function nowMadridParts() {
     minute: Number(get("minute")),
     second: Number(get("second"))
   };
-}
-
-function todayMadridString() {
-  const { year, month, day } = nowMadridParts();
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 function isInWindow() {
@@ -139,31 +132,19 @@ app.get("/tick", async (req, res) => {
   }
 
   const now = Date.now();
-  const today = todayMadridString();
-  const { hour } = nowMadridParts();
 
   if (!isInWindow()) {
     return res.json({ ok: true, sent: 0, window: "closed" });
   }
 
-  // Reactiva el bot cuando llega la hora del día siguiente
   if (state.done && now >= state.nextAsk) {
     state.done = false;
   }
 
-  // Primero, comportamiento normal del bot
   if (!state.done && now >= state.nextAsk) {
     await sendTelegram("¿Has subido la foto?");
-    state.nextAsk = now + THIRTY_MIN;
-    state.lastPromptDate = today;
-    return res.json({ ok: true, sent: 1, type: "prompt" });
-  }
-
-  // A partir de las 22:00, si hoy no ha mandado nada, avisa
-  if (hour >= 22 && state.lastPromptDate !== today && state.lastAlertDate !== today) {
-    await sendTelegram("BOT_FOTO: hoy no he enviado ningún recordatorio. Revisa si algo ha fallado.");
-    state.lastAlertDate = today;
-    return res.json({ ok: true, sent: 1, type: "alert" });
+    state.nextAsk = now + ONE_HOUR;
+    return res.json({ ok: true, sent: 1 });
   }
 
   res.json({ ok: true, sent: 0 });
